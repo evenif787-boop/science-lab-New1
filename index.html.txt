@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>未来科学家实验室 Pro</title>
+    <!-- 引入 Matter.js 物理引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- 引入图标库 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* --- 全局变量与重置 --- */
+        :root {
+            --primary: #6C5CE7;
+            --secondary: #00B894;
+            --accent: #FF7675;
+            --dark: #2D3436;
+            --light: #DFE6E9;
+            --bg: #F5F6FA;
+            --sidebar-width: 260px;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        
+        body {
+            margin: 0;
+            font-family: 'Nunito', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            color: var(--dark);
+        }
+
+        /* --- 启动遮罩 (用于解锁音频) --- */
+        #start-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(45, 52, 54, 0.95);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.5s;
+        }
+        .start-btn {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background: var(--secondary);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            cursor: pointer;
+            margin-top: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        /* --- 侧边栏 --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #636E72;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .nav-item:hover { background: var(--bg); }
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 5px 15px rgba(108, 92, 231, 0.3);
+        }
+
+        /* --- 主内容区 --- */
+        .main-stage {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-info {
+            margin-bottom: 20px;
+        }
+
+        .module-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 10px 25px;
+            border-radius: 20px;
+            border: 2px solid transparent;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+            color: #636E72;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(108, 92, 231, 0.1);
+        }
+
+        /* --- 实验区域容器 --- */
+        .lab-container {
+            flex: 1;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+            min-height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 内容板块 --- */
+        .content-section { display: none; height: 100%; padding: 20px; animation: fadeIn 0.4s; }
+        .content-section.active { display: block; }
+
+        /* --- 物理引擎画布 --- */
+        #physics-canvas { width: 100%; height: 100%; display: block; }
+        
+        /* --- 通用实验控件 --- */
+        .controls-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.9);
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn-action {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .btn-action:hover { transform: scale(1.1); }
+        .btn-action:active { transform: scale(0.9); }
+
+        /* --- 现实应用卡片 --- */
+        .real-world-card {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+
+        /* --- 测验样式 --- */
+        .quiz-box { max-width: 800px; margin: 0 auto; }
+        .quiz-item {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            border: 1px solid #eee;
+        }
+        .quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .option-btn {
+            padding: 15px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            text-align: left;
+        }
+        .option-btn:hover { background: #f0f0f0; }
+        .option-btn.correct { background: #dff9fb; border-color: #badc58; color: #6ab04c; }
+        .option-btn.wrong { background: #ffcece; border-color: #ff7675; color: #d63031; }
+
+        /* --- 动画定义 --- */
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 化学模块特定 */
+        .beaker-container { 
+            display: flex; justify-content: center; align-items: flex-end; height: 70%; position: relative; 
+        }
+        .beaker {
+            width: 200px; height: 250px; border: 4px solid #dfe6e9; border-top: none; border-radius: 0 0 20px 20px;
+            position: relative; overflow: hidden; background: rgba(255,255,255,0.5);
+        }
+        .liquid-chem {
+            position: absolute; bottom: 0; width: 100%; height: 50%; background: #74b9ff; transition: background 1s;
+        }
+        .particle { position: absolute; border-radius: 50%; opacity: 0.7; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 启动覆盖层 -->
+    <div id="start-overlay">
+        <i class="fas fa-rocket fa-5x" style="color: #FFD700;"></i>
+        <h1>欢迎来到未来科学家实验室</h1>
+        <p>准备好探索物理引擎和化学魔法了吗？</p>
+        <button class="start-btn" onclick="initApp()">开始实验 🚀</button>
+    </div>
+
+    <!-- 侧边导航 -->
+    <div class="sidebar">
+        <div class="brand"><i class="fas fa-flask"></i> Sci-Lab Pro</div>
+        <div class="nav-item active" onclick="switchModule(0)">
+            <i class="fas fa-apple-alt"></i> 物理：万有引力
+        </div>
+        <div class="nav-item" onclick="switchModule(1)">
+            <i class="fas fa-bolt"></i> 物理：趣味电路
+        </div>
+        <div class="nav-item" onclick="switchModule(2)">
+            <i class="fas fa-vial"></i> 化学：酸碱魔法
+        </div>
+        
+        <div style="margin-top: auto; background: #f1f2f6; padding: 15px; border-radius: 10px;">
+            <h4><i class="fas fa-trophy"></i> 我的成就</h4>
+            <p>已完成实验: <span id="score-count">0</span>/3</p>
+            <div style="height: 8px; background: #ddd; border-radius: 4px; margin-top:5px;">
+                <div id="progress-bar" style="width: 0%; height: 100%; background: var(--secondary); border-radius: 4px; transition: width 0.5s;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主舞台 -->
+    <div class="main-stage">
+        <div class="header-info">
+            <h1 id="module-title">物理：牛顿的苹果与万有引力</h1>
+            <p id="module-desc">在这里，我们将使用真实的物理引擎来模拟重力、碰撞和堆叠！</p>
+        </div>
+
+        <div class="module-tabs">
+            <button class="tab-btn active" onclick="switchTab('lab')"><i class="fas fa-microscope"></i> 实验室</button>
+            <button class="tab-btn" onclick="switchTab('theory')"><i class="fas fa-book-open"></i> 科学原理</button>
+            <button class="tab-btn" onclick="switchTab('realworld')"><i class="fas fa-city"></i> 现实应用</button>
+            <button class="tab-btn" onclick="switchTab('quiz')"><i class="fas fa-question-circle"></i> 挑战答题</button>
+        </div>
+
+        <div class="lab-container">
+            
+            <!-- 1. 实验室视图 -->
+            <div id="view-lab" class="content-section active" style="padding: 0; position: relative;">
+                <!-- 物理引擎容器 -->
+                <div id="physics-wrapper" style="width: 100%; height: 100%;"></div>
+                
+                <!-- 化学容器 -->
+                <div id="chem-wrapper" style="width: 100%; height: 100%; display:none;">
+                    <div class="beaker-container">
+                        <div class="beaker">
+                            <div class="liquid-chem" id="chem-liquid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 电路容器 -->
+                <div id="circuit-wrapper" style="width: 100%; height: 100%; display:none; position: relative; background: #34495e;">
+                    <!-- 电路元素将通过JS绘制 -->
+                    <div id="circuit-board" style="position: relative; width: 100%; height: 100%;"></div>
+                </div>
+
+                <!-- 控制栏 (动态内容) -->
+                <div class="controls-bar" id="controls">
+                    <!-- JS生成按钮 -->
+                </div>
+            </div>
+
+            <!-- 2. 科学原理视图 -->
+            <div id="view-theory" class="content-section" style="overflow-y: auto;">
+                <div id="theory-content" style="font-size: 1.2rem; line-height: 1.8;"></div>
+            </div>
+
+            <!-- 3. 现实应用视图 -->
+            <div id="view-realworld" class="content-section" style="overflow-y: auto;">
+                <div id="realworld-content"></div>
+            </div>
+
+            <!-- 4. 测验视图 -->
+            <div id="view-quiz" class="content-section" style="overflow-y: auto;">
+                <div class="quiz-box" id="quiz-content"></div>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    // --- 音效系统 (Base64) ---
+    const Sounds = {
+        click: new Audio("data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="), // 占位，实际逻辑中模拟短音
+        pop: null,
+        success: null,
+        init: function() {
+            // 生成简单的振荡器音效，无需下载文件
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        },
+        playTone: function(freq, type, duration) {
+            if(!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+            osc.stop(this.ctx.currentTime + duration);
+        },
+        playClick: function() { this.playTone(600, 'sine', 0.1); },
+        playPop: function() { this.playTone(400, 'triangle', 0.1); },
+        playZap: function() { this.playTone(200, 'sawtooth', 0.2); },
+        playSuccess: function() { 
+            this.playTone(500, 'sine', 0.1);
+            setTimeout(() => this.playTone(800, 'sine', 0.2), 100);
+        }
+    };
+
+    // --- 数据配置 ---
+    const AppData = [
+        {
+            id: 'physics_gravity',
+            title: '物理：万有引力与结构',
+            desc: '使用Matter.js物理引擎，体验真实的重力、碰撞和堆叠乐趣！',
+            theory: `
+                <h3>🍎 什么是万有引力？</h3>
+                <p>任何有质量的物体之间都有吸引力。在地球上，地球拉着所有的物体向下，这就是为什么苹果会掉下来。</p>
+                <h3>🧱 结构与平衡</h3>
+                <p>在搭建积木时，重心如果超出了底座的范围，物体就会倒塌。这就是物理学中的“力矩平衡”。</p>
+            `,
+            realWorld: `
+                <div class="real-world-card">
+                    <h3>🏗️ 建筑工程</h3>
+                    <p>工程师利用重力和平衡原理建造摩天大楼。如果不计算好物理结构，大楼就会像积木一样倒塌。</p>
+                </div>
+                <div class="real-world-card" style="background: linear-gradient(135deg, #fab1a0, #e17055);">
+                    <h3>🎢 过山车</h3>
+                    <p>过山车从高处俯冲，利用重力势能转化为动能，让我们体验风驰电掣的感觉。</p>
+                </div>
+            `,
+            quiz: [
+                { q: "如果不小心把桌子上的杯子推出去，它会去哪里？", options: ["往上飞", "掉到地上", "悬在空中"], ans: 1 },
+                { q: "要想让积木堆得高，最下面应该放什么样的？", options: ["最小的", "最大的", "圆形的"], ans: 1 }
+            ],
+            controls: [
+                { icon: 'fa-cube', action: 'spawnBox', color: '#00cec9' },
+                { icon: 'fa-circle', action: 'spawnBall', color: '#fdcb6e' },
+                { icon: 'fa-trash', action: 'clearWorld', color: '#d63031' }
+            ]
+        },
+        {
+            id: 'physics_circuit',
+            title: '物理：趣味电路',
+            desc: '连接电池和灯泡，探索电流的奥秘！',
+            theory: `
+                <h3>⚡ 什么是电路？</h3>
+                <p>电路就是电子流动的道路。就像赛车在赛道上跑一样，必须是一圈完整的路（闭合回路），车才能跑起来。</p>
+                <h3>🔌 导体与绝缘体</h3>
+                <p>金属可以让电通过（导体），而塑料和橡胶不让电通过（绝缘体）。</p>
+            `,
+            realWorld: `
+                <div class="real-world-card" style="background: linear-gradient(135deg, #fdcb6e, #e17055);">
+                    <h3>💡 家里的灯</h3>
+                    <p>我们按下墙上的开关，就是连通了墙里的电路，让电厂的电能流到灯泡里。</p>
+                </div>
+            `,
+            quiz: [
+                { q: "下面哪个东西可以导电？", options: ["铁钉", "橡皮", "木头"], ans: 0 },
+                { q: "开关的作用是什么？", options: ["产生电", "控制电路通断", "消耗电"], ans: 1 }
+            ],
+            controls: [
+                { icon: 'fa-power-off', action: 'toggleSwitch', color: '#2d3436' }
+            ]
+        },
+        {
+            id: 'chem_ph',
+            title: '化学：酸碱魔法水',
+            desc: '滴入不同的溶液，观察神奇的颜色变化！',
+            theory: `
+                <h3>⚗️ pH值是什么？</h3>
+                <p>pH值是用来测量液体是酸性还是碱性的尺子。pH值越小越酸，越大越碱。</p>
+                <h3>🌈 为什么会变色？</h3>
+                <p>我们使用了一种叫做“花青素”的指示剂，它遇到酸会变红，遇到碱会变蓝/绿。紫甘蓝里就有很多这种物质！</p>
+            `,
+            realWorld: `
+                <div class="real-world-card" style="background: linear-gradient(135deg, #a29bfe, #6c5ce7);">
+                    <h3>🧼 肥皂和洗发水</h3>
+                    <p>肥皂通常是弱碱性的，可以去油污。而护发素通常是弱酸性的，可以保护头发。</p>
+                </div>
+                <div class="real-world-card" style="background: linear-gradient(135deg, #ffeaa7, #fab1a0);">
+                    <h3>🍋 胃酸</h3>
+                    <p>我们的胃里有很强的酸，帮助我们消化食物，杀灭细菌。</p>
+                </div>
+            `,
+            quiz: [
+                { q: "柠檬汁是什么味道的？它是酸性还是碱性？", options: ["甜的/碱性", "酸的/酸性", "苦的/中性"], ans: 1 },
+                { q: "如果指示剂变蓝了，说明加了什么？", options: ["苏打水(碱)", "白醋(酸)", "白开水"], ans: 0 }
+            ],
+            controls: [
+                { icon: 'fa-lemon', action: 'addAcid', color: '#e17055' },
+                { icon: 'fa-soap', action: 'addBase', color: '#74b9ff' },
+                { icon: 'fa-tint', action: 'resetChem', color: '#dfe6e9' }
+            ]
+        }
+    ];
+
+    // --- 全局状态 ---
+    let currentModuleIdx = 0;
+    let completedModules = new Set();
+    let physicsEngine = null;
+    let render = null;
+
+    // --- 初始化 ---
+    function initApp() {
+        document.getElementById('start-overlay').style.opacity = 0;
+        setTimeout(() => document.getElementById('start-overlay').style.display = 'none', 500);
+        Sounds.init();
+        loadModule(0);
+    }
+
+    function switchModule(idx) {
+        Sounds.playClick();
+        currentModuleIdx = idx;
+        
+        // UI更新
+        document.querySelectorAll('.nav-item').forEach((el, i) => {
+            el.classList.toggle('active', i === idx);
+        });
+        
+        loadModule(idx);
+    }
+
+    function loadModule(idx) {
+        const data = AppData[idx];
+        document.getElementById('module-title').innerText = data.title;
+        document.getElementById('module-desc').innerText = data.desc;
+        
+        // 填充内容
+        document.getElementById('theory-content').innerHTML = data.theory;
+        document.getElementById('realworld-content').innerHTML = data.realWorld;
+        renderQuiz(data.quiz);
+        renderControls(data.controls);
+
+        // 切换回实验室标签
+        switchTab('lab');
+
+        // 初始化特定实验
+        stopPhysics(); // 清理旧物理
+        document.getElementById('physics-wrapper').style.display = 'none';
+        document.getElementById('chem-wrapper').style.display = 'none';
+        document.getElementById('circuit-wrapper').style.display = 'none';
+
+        if (data.id === 'physics_gravity') initPhysicsLab();
+        if (data.id === 'physics_circuit') initCircuitLab();
+        if (data.id === 'chem_ph') initChemLab();
+    }
+
+    function switchTab(tabName) {
+        Sounds.playClick();
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.closest('.tab-btn').classList.add('active'); // 简单处理，实际项目中应用ref
+
+        document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+        document.getElementById(`view-${tabName}`).classList.add('active');
+    }
+
+    // --- 渲染控件 ---
+    function renderControls(controls) {
+        const bar = document.getElementById('controls');
+        bar.innerHTML = '';
+        controls.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'btn-action';
+            btn.style.background = c.color;
+            btn.innerHTML = `<i class="fas ${c.icon}"></i>`;
+            btn.onclick = () => handleAction(c.action);
+            bar.appendChild(btn);
+        });
+    }
+
+    // --- 动作分发中心 ---
+    function handleAction(action) {
+        Sounds.playClick();
+        
+        // 物理引擎动作
+        if (action === 'spawnBox') spawnBody('box');
+        if (action === 'spawnBall') spawnBody('circle');
+        if (action === 'clearWorld') clearPhysics();
+
+        // 电路动作
+        if (action === 'toggleSwitch') toggleCircuit();
+
+        // 化学动作
+        if (action === 'addAcid') changePh('acid');
+        if (action === 'addBase') changePh('base');
+        if (action === 'resetChem') changePh('reset');
+    }
+
+    // ==========================================
+    // 模块 1: Matter.js 物理引擎集成
+    // ==========================================
+    function initPhysicsLab() {
+        const container = document.getElementById('physics-wrapper');
+        container.style.display = 'block';
+
+        // 模块别名
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              Composite = Matter.Composite,
+              Mouse = Matter.Mouse,
+              MouseConstraint = Matter.MouseConstraint;
+
+        // 创建引擎
+        physicsEngine = Engine.create();
+        const world = physicsEngine.world;
+
+        // 创建渲染器
+        render = Render.create({
+            element: container,
+            engine: physicsEngine,
+            options: {
+                width: container.offsetWidth,
+                height: container.offsetHeight,
+                background: 'transparent',
+                wireframes: false
+            }
+        });
+
+        // 边界
+        const ground = Bodies.rectangle(container.offsetWidth/2, container.offsetHeight, container.offsetWidth, 60, { isStatic: true, render: { fillStyle: '#2d3436' } });
+        const leftWall = Bodies.rectangle(0, container.offsetHeight/2, 60, container.offsetHeight, { isStatic: true, render: { visible: false } });
+        const rightWall = Bodies.rectangle(container.offsetWidth, container.offsetHeight/2, 60, container.offsetHeight, { isStatic: true, render: { visible: false } });
+        
+        Composite.add(world, [ground, leftWall, rightWall]);
+
+        // 鼠标交互
+        const mouse = Mouse.create(render.canvas);
+        const mouseConstraint = MouseConstraint.create(physicsEngine, {
+            mouse: mouse,
+            constraint: { stiffness: 0.2, render: { visible: false } }
+        });
+        Composite.add(world, mouseConstraint);
+        render.mouse = mouse;
+
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, physicsEngine);
+        physicsEngine.runner = runner; // 存储引用以便清理
+    }
+
+    function spawnBody(type) {
+        if (!physicsEngine) return;
+        Sounds.playPop();
+        const x = Math.random() * 400 + 100;
+        const y = 50;
+        let body;
+        
+        if (type === 'box') {
+            body = Matter.Bodies.rectangle(x, y, 60, 60, { 
+                restitution: 0.5,
+                render: { fillStyle: '#00cec9' } 
+            });
+        } else {
+            body = Matter.Bodies.circle(x, y, 30, { 
+                restitution: 0.8,
+                render: { fillStyle: '#fdcb6e' } 
+            });
+        }
+        Matter.Composite.add(physicsEngine.world, body);
+    }
+
+    function clearPhysics() {
+        if (!physicsEngine) return;
+        Matter.Composite.clear(physicsEngine.world, false);
+        // 重新添加边界 (简单处理：重新初始化)
+        stopPhysics();
+        initPhysicsLab();
+    }
+
+    function stopPhysics() {
+        if (physicsEngine) {
+            Matter.Render.stop(render);
+            Matter.Runner.stop(physicsEngine.runner);
+            render.canvas.remove();
+            render.canvas = null;
+            render.context = null;
+            render.textures = {};
+            physicsEngine = null;
+        }
+    }
+
+    // ==========================================
+    // 模块 2: 电路模拟 (原生Canvas绘制)
+    // ==========================================
+    let isCircuitOn = false;
+    
+    function initCircuitLab() {
+        const wrapper = document.getElementById('circuit-wrapper');
+        wrapper.style.display = 'block';
+        const board = document.getElementById('circuit-board');
+        
+        // 简单起见，使用HTML结构模拟，比Canvas更容易交互
+        board.innerHTML = `
+            <div style="position:absolute; top:20%; left:10%; font-size:3rem; color:#d63031;"><i class="fas fa-battery-full"></i></div>
+            <div id="bulb-icon" style="position:absolute; top:20%; right:15%; font-size:4rem; color:#b2bec3; transition:0.3s;"><i class="fas fa-lightbulb"></i></div>
+            <div id="switch-icon" style="position:absolute; bottom:20%; left:45%; font-size:3rem; color:#636e72; transform: rotate(-30deg); transition:0.3s;"><i class="fas fa-toggle-off"></i></div>
+            
+            <!-- 导线 (SVG) -->
+            <svg width="100%" height="100%" style="position:absolute; top:0; pointer-events:none;">
+                <path d="M 100 150 L 100 50 L 600 50 L 600 150" stroke="#95a5a6" stroke-width="5" fill="none" />
+                <path d="M 100 200 L 100 350 L 350 350" stroke="#95a5a6" stroke-width="5" fill="none" />
+                <path d="M 600 250 L 600 350 L 450 350" stroke="#95a5a6" stroke-width="5" fill="none" />
+            </svg>
+        `;
+        isCircuitOn = false;
+    }
+
+    function toggleCircuit() {
+        isCircuitOn = !isCircuitOn;
+        const bulb = document.getElementById('bulb-icon');
+        const sw = document.getElementById('switch-icon');
+        
+        if(isCircuitOn) {
+            Sounds.playZap();
+            bulb.style.color = '#f1c40f';
+            bulb.style.textShadow = '0 0 30px #f1c40f';
+            sw.style.transform = 'rotate(0deg)';
+            sw.style.color = '#2d3436';
+            sw.innerHTML = '<i class="fas fa-toggle-on"></i>';
+        } else {
+            bulb.style.color = '#b2bec3';
+            bulb.style.textShadow = 'none';
+            sw.style.transform = 'rotate(-30deg)';
+            sw.style.color = '#636e72';
+            sw.innerHTML = '<i class="fas fa-toggle-off"></i>';
+        }
+    }
+
+    // ==========================================
+    // 模块 3: 化学模拟
+    // ==========================================
+    function initChemLab() {
+        document.getElementById('chem-wrapper').style.display = 'block';
+        document.getElementById('chem-liquid').style.background = '#74b9ff'; // 中性
+        document.getElementById('chem-liquid').style.height = '50%';
+    }
+
+    function changePh(type) {
+        const liquid = document.getElementById('chem-liquid');
+        if (type === 'acid') {
+            Sounds.playPop();
+            liquid.style.background = '#ff7675'; // 变红
+            liquid.style.height = '60%';
+            createBubbles();
+        } else if (type === 'base') {
+            Sounds.playPop();
+            liquid.style.background = '#6c5ce7'; // 变蓝
+            liquid.style.height = '60%';
+            createBubbles();
+        } else {
+            liquid.style.background = '#74b9ff';
+            liquid.style.height = '50%';
+        }
+    }
+
+    function createBubbles() {
+        const beaker = document.querySelector('.beaker');
+        for(let i=0; i<5; i++) {
+            const b = document.createElement('div');
+            b.className = 'particle';
+            b.style.width = Math.random()*10 + 5 + 'px';
+            b.style.height = b.style.width;
+            b.style.background = 'rgba(255,255,255,0.6)';
+            b.style.left = Math.random()*150 + 20 + 'px';
+            b.style.bottom = '0';
+            beaker.appendChild(b);
+
+            // 简单的气泡上升动画逻辑
+            let pos = 0;
+            const anim = setInterval(() => {
+                pos += 2;
+                b.style.bottom = pos + 'px';
+                if(pos > 200) {
+                    clearInterval(anim);
+                    b.remove();
+                }
+            }, 20);
+        }
+    }
+
+    // ==========================================
+    // 测验与成就系统
+    // ==========================================
+    function renderQuiz(questions) {
+        const container = document.getElementById('quiz-content');
+        container.innerHTML = '';
+        
+        questions.forEach((q, idx) => {
+            const item = document.createElement('div');
+            item.className = 'quiz-item';
+            
+            let optionsHtml = '';
+            q.options.forEach((opt, optIdx) => {
+                optionsHtml += `<button class="option-btn" onclick="checkAnswer(this, ${optIdx}, ${q.ans}, ${idx})">${opt}</button>`;
+            });
+
+            item.innerHTML = `
+                <h3>❓ 问题 ${idx+1}: ${q.q}</h3>
+                <div class="quiz-options">${optionsHtml}</div>
+                <div class="result-msg" style="margin-top:10px; font-weight:bold;"></div>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    function checkAnswer(btn, selected, correct, qIdx) {
+        const parent = btn.parentElement;
+        const msg = parent.nextElementSibling;
+        
+        // 禁用该题所有按钮
+        const allBtns = parent.querySelectorAll('.option-btn');
+        allBtns.forEach(b => b.disabled = true);
+
+        if (selected === correct) {
+            btn.classList.add('correct');
+            msg.innerHTML = "✅ 回答正确！太棒了！";
+            msg.style.color = "#27ae60";
+            Sounds.playSuccess();
+            updateProgress();
+        } else {
+            btn.classList.add('wrong');
+            // 高亮正确答案
+            allBtns[correct].classList.add('correct');
+            msg.innerHTML = "❌ 哎呀，答错了。再接再厉！";
+            msg.style.color = "#c0392b";
+        }
+    }
+
+    function updateProgress() {
+        // 简单的进度逻辑：每答对一个问题就算一点（实际应该更复杂）
+        // 这里演示完成一个模块
+        completedModules.add(currentModuleIdx);
+        const count = completedModules.size;
+        document.getElementById('score-count').innerText = count;
+        document.getElementById('progress-bar').style.width = (count / 3 * 100) + '%';
+
+        if (count === 3) {
+            // 全通关特效，可以加confetti
+            setTimeout(() => alert("🎉 恭喜你成为了小小科学家大师！"), 500);
+        }
+    }
+
+</script>
+</body>
+</html>
